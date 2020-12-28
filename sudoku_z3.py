@@ -46,7 +46,7 @@ def z3_solving(puzzle):
 
     return Sudoku(values)
 
-def main():
+def main(argv):
     puzzles = []
     with open('1106_375.txt', 'r') as f:
         lines = f.readlines()
@@ -78,7 +78,14 @@ def main():
     avg = round(((end - start)/count)*millis_from_secs, 6)
     print(f'{avg}ms average solve time for {count} puzzles')
 
+    millis_from_secs = 1000
+    start = now()
+    for puzzle in solutions:
+        z3_solving(puzzle)
+    end = now()
+    avg = round(((end - start)/count)*millis_from_secs, 6)
+    print(f'{avg}ms average check time for {count} puzzles')
+
 if __name__ == "__main__":
     from sys import argv
-
-    main()
+    main(argv)
