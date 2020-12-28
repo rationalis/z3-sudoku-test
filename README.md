@@ -10,4 +10,6 @@ available Sudoku solver (AFAIK) is a great resource.
 
 Running this on my machine (equipped with an i7 6700K) with [Z3
 4.8.9](https://github.com/Z3Prover/z3/releases/tag/z3-4.8.9) resulted in an
-average of ~15ms on the easy-49K set. and ~29ms on the hard-375 set.
+average of ~15ms on the easy-49K set. and ~29ms on the hard-375 set. Note that,
+as a rough measure of the overhead of the Z3 Python API, simply checking a
+solved puzzle averaged ~7ms.
