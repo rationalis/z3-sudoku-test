@@ -1,38 +1,97 @@
 #!/usr/bin/env python3
 
-from sudoku import Sudoku, rows, cols
+from sudoku import Sudoku, rows, cols, cross
 
-from z3 import Solver, Int, Or, Distinct, sat
+from z3 import Solver, Bool, Int, Not, And, Or, Distinct, sat
 
-from itertools import product
+from itertools import chain, product
 
+vals = cols
 symbols = {pos: Int(pos) for pos in Sudoku.positions}
-blocks = list(product(range(3), repeat=2))
+bool_symbols = {pos: [Bool(pos+str(val)) for val in vals] for pos in Sudoku.positions}
 
-def block_cell(block_row, block_col, inner_row, inner_col):
+def block_cell_ind(block_row, block_col, inner_row, inner_col):
     i, j, m, n = block_row, block_col, inner_row, inner_col
-    return symbols[rows[i * 3 + m] + cols[j * 3 + n]]
+    return rows[i * 3 + m] + cols[j * 3 + n]
+
+class SymbolGrid:
+    def __init__(self, d):
+        self.d = d
+
+    @property
+    def cells(self):
+        return self.d.values()
+
+    @property
+    def cols(self):
+        for col in cols:
+            yield [self.d[row + col] for row in rows]
+
+    @property
+    def rows(self):
+        for row in rows:
+            yield [self.d[row + col] for col in cols]
+
+    @property
+    def blocks(self):
+        square = list(product(range(3), repeat=2))
+        for i, j in square:
+            yield [self.d[block_cell_ind(i,j,m,n)] for m, n in square]
+
+    @property
+    def groups(self):
+        for group in chain(self.rows, self.cols, self.blocks):
+            yield group
+
+
+def distinct_bool(L):
+    for v in range(9):
+        for i, e1 in enumerate(L):
+            for j in range(i+1, len(L)):
+                e2 = L[j]
+                yield Not(And(e1[v], e2[v]))
+
+def basic_solver_bool(solver=None):
+    if not solver:
+        solver = Solver()
+
+    grid = SymbolGrid(bool_symbols)
+    # assert that every cell holds a value of [1,9]
+    for cell in grid.cells:
+        solver.add(Or(cell))
+
+    # assert that no group holds any value twice
+    for group in grid.groups:
+        for constraint in distinct_bool(group):
+            solver.add(constraint)
+
+    return solver
+
+def with_hidden_singles_bool(solver=None):
+    if not solver:
+        solver = basic_solver_bool()
+
+    grid = SymbolGrid(bool_symbols)
+    # every group contains each value in some cell:
+    for group in grid.groups:
+        for v in range(9):
+            solver.add(Or([cell[v] for cell in group]))
+
+    return solver
 
 def basic_solver(solver=None):
     if not solver:
-        # first we build a solver with the general constraints for sudoku puzzles:
         solver = Solver()
 
-    # assure that every cell holds a value of [1,9]
-    for symbol in symbols.values():
-        solver.add(Or([symbol == i for i in range(1, 10)]))
+    grid = SymbolGrid(symbols)
 
-    # assure that every row covers every value:
-    for row in rows:
-        solver.add(Distinct([symbols[row + col] for col in cols]))
+    # assert that every cell holds a value of [1,9]
+    for cell in grid.cells:
+        solver.add(Or([cell == i for i in range(1, 10)]))
 
-    # assure that every column covers every value:
-    for col in cols:
-        solver.add(Distinct([symbols[row + col] for row in rows]))
-
-    # assure that every block covers every value:
-    for i, j in blocks:
-        solver.add(Distinct([block_cell(i,j,m,n) for m, n in blocks]))
+    # assert that no group holds any value twice
+    for group in grid.groups:
+        solver.add(Distinct(group))
 
     return solver
 
@@ -40,19 +99,12 @@ def with_hidden_singles(solver=None):
     if not solver:
         solver = basic_solver()
 
-    # every row contains each value in some column:
-    for row in rows:
-        for v in range(1, 10):
-            solver.add(Or([symbols[row + col] == v for col in cols]))
+    grid = SymbolGrid(symbols)
 
-    # every column contains each value in some row:
-    for col in cols:
+    # every group contains each value in some cell:
+    for group in grid.groups:
         for v in range(1, 10):
-            solver.add(Or([symbols[row + col] == v for row in rows]))
-
-    # every block contains each value in some cell:
-    for (i, j), v in product(blocks, range(10)):
-        solver.add(Or([block_cell(i,j,m,n) == v for m, n in blocks]))
+            solver.add(Or([cell == v for cell in group]))
 
     return solver
 
@@ -71,7 +123,14 @@ def z3_solving(puzzle, solver):
         raise Exception("unsolvable")
 
     model = solver.model()
-    values = {pos: model.evaluate(s).as_string() for pos, s in symbols.items()}
+    try:
+        values = {pos: model.evaluate(s).as_string() for pos, s in symbols.items()}
+    except:
+        values = dict()
+        for pos, l in bool_symbols.items():
+            for v in range(9):
+                if model.evaluate(l[v]):
+                    values[pos] = str(v+1)
     solver.pop()
 
     return Sudoku(values)
@@ -101,18 +160,21 @@ def main(argv):
     with open('1106_375.txt', 'r') as f:
         lines = f.readlines()
         count = len(lines)
-        if count >= 500:
+        parse_display_limit = 100
+        if count >= parse_display_limit:
             print('[+] parsing puzzles')
         for i, line in enumerate(lines):
             puzzle = line.strip()
-            if count < 500:
+            if count < parse_display_limit:
                 print("[+] parsing puzzle:", puzzle)
             elif count > 1000 and i % 1000 == 0 and i > 0:
                 print(f'[+] parsing puzzle {i}')
             puzzles.append(Sudoku(string=puzzle))
 
-    timed_solve(puzzles, basic_solver(), 'basic Z3')
-    solutions = timed_solve(puzzles, with_hidden_singles(), 'hidden singles Z3')
+    solutions = timed_solve(puzzles, basic_solver(), 'basic Z3')
+    timed_solve(puzzles, with_hidden_singles(), 'hidden singles Z3')
+    timed_solve(puzzles, basic_solver_bool(), 'basic Z3 (boolean)')
+    timed_solve(puzzles, with_hidden_singles_bool(), 'hidden singles Z3 (boolean)')
     timed_solve(solutions, basic_solver(), 'complete solution checker')
 
 
