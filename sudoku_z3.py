@@ -4,7 +4,7 @@ from sudoku import Sudoku, rows, cols, cross
 
 from z3 import Solver, Bool, Int, Not, And, Or, Distinct, sat
 
-from itertools import chain, product
+from itertools import chain, combinations, product
 
 vals = cols
 symbols = {pos: Int(pos) for pos in Sudoku.positions}
@@ -44,13 +44,6 @@ class SymbolGrid:
             yield group
 
 
-def distinct_bool(L):
-    for v in range(9):
-        for i, e1 in enumerate(L):
-            for j in range(i+1, len(L)):
-                e2 = L[j]
-                yield Not(And(e1[v], e2[v]))
-
 def basic_solver_bool(solver=None):
     if not solver:
         solver = Solver()
@@ -62,8 +55,9 @@ def basic_solver_bool(solver=None):
 
     # assert that no group holds any value twice
     for group in grid.groups:
-        for constraint in distinct_bool(group):
-            solver.add(constraint)
+        for cell1, cell2 in combinations(group, 2):
+            for v in range(9):
+                solver.add(Not(And(cell1[v], cell2[v])))
 
     return solver
 
