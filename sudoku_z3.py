@@ -4,7 +4,14 @@ from sudoku import Sudoku, rows, cols
 
 from z3 import Solver, Int, Or, Distinct, sat
 
+from itertools import product
+
 symbols = {pos: Int(pos) for pos in Sudoku.positions}
+blocks = list(product(range(3), repeat=2))
+
+def block_cell(block_row, block_col, inner_row, inner_col):
+    i, j, m, n = block_row, block_col, inner_row, inner_col
+    return symbols[rows[i * 3 + m] + cols[j * 3 + n]]
 
 def basic_solver(solver=None):
     if not solver:
@@ -24,9 +31,8 @@ def basic_solver(solver=None):
         solver.add(Distinct([symbols[row + col] for row in rows]))
 
     # assure that every block covers every value:
-    for i in range(3):
-        for j in range(3):
-            solver.add(Distinct([symbols[rows[m + i * 3] + cols[n + j * 3]] for m in range(3) for n in range(3)]))
+    for i, j in blocks:
+        solver.add(Distinct([block_cell(i,j,m,n) for m, n in blocks]))
 
     return solver
 
@@ -44,11 +50,9 @@ def with_hidden_singles(solver=None):
         for v in range(1, 10):
             solver.add(Or([symbols[row + col] == v for row in rows]))
 
-    # assure that every block covers every value:
-    for i in range(3):
-        for j in range(3):
-            for v in range(1, 10):
-                solver.add(Or([symbols[rows[m + i * 3] + cols[n + j * 3]] == v for m in range(3) for n in range(3)]))
+    # every block contains each value in some cell:
+    for (i, j), v in product(blocks, range(10)):
+        solver.add(Or([block_cell(i,j,m,n) == v for m, n in blocks]))
 
     return solver
 

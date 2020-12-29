@@ -5,8 +5,8 @@ def cross(iter_a, iter_b):
 
     return [(x + y) for x in iter_a for y in iter_b]
 
-positions = cross("ABCDEFGHI", "123456789")
 rows, cols = "ABCDEFGHI", "123456789"
+positions = cross(rows, cols)
 # units stores a list of lists with cells belonging together:
 units = [cross(rows, col) for col in cols] \
         + [cross(row, cols) for row in rows] \
